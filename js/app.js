@@ -1,10 +1,18 @@
 import { questionsData } from './questions.js';
 import { PROFILE_REGISTRY } from './profiles.js';
+import { translations } from './i18n.js';
 
-const APP_VERSION = "v3.2.0-verified";
-const METHODOLOGY_CODE = "NNPI-2026-Rev9";
-const STORAGE_KEY = "disc_eval_secure_v3";
+const APP_VERSION = "v3.3.0-enterprise";
+const METHODOLOGY_CODE = "NNPI-2026-Rev10";
+const STORAGE_KEY = "disc_eval_secure_v4";
 const STORAGE_TTL_DAYS = 30;
+
+let currentLang = 'zh'; // 'zh' | 'en'
+let timeAuditor = null;
+const userAnswers = {};
+let chartInstance = null;
+let isPrinting = false;
+let latestEvaluation = null;
 
 // --- Web Crypto API：真隨機 AES-GCM 安全儲存 ---
 class SecureStorage {
@@ -185,7 +193,7 @@ class TimeAuditor {
       .sort((a, b) => a.time - b.time);
 
     let hasRushedPattern = false;
-    let rushReason = "";
+    let rushReasonKey = "";
 
     if (chronologicalFirstTimes.length >= 8) {
       const rawIntervals = [];
@@ -205,7 +213,7 @@ class TimeAuditor {
       const tailAvg = tailIntervals.reduce((a, b) => a + b, 0) / tailIntervals.length;
       if (tailAvg < Math.max(1000, medianBaseline * 0.25)) {
         hasRushedPattern = true;
-        rushReason = "末尾題項節奏急促加速";
+        rushReasonKey = "tailRushed";
       }
 
       let accelStreak = 0;
@@ -214,7 +222,7 @@ class TimeAuditor {
           accelStreak++;
           if (accelStreak >= 3) {
             hasRushedPattern = true;
-            rushReason = "後半段出現連續遞增急躁作答模式";
+            rushReasonKey = "accelerating";
             break;
           }
         } else {
@@ -235,12 +243,11 @@ class TimeAuditor {
         hadLongPause: this.hadLongPause,
         pauseMinutes: this.pauseDurationMinutes,
         conflictedQuestions,
-        warningZh: `【低信度警告】有效作答時長僅 ${elapsedSeconds} 秒（平均每題不足 1 秒）。作答速度極快，結果可能未經充分審思，僅供粗略參考。`
+        msgKey: 'auditRed'
       };
     }
 
     if (avgPerQuestion < 2.0 || hasRushedPattern) {
-      const detail = hasRushedPattern ? rushReason : '整體作答均速偏快';
       return {
         level: 'YELLOW',
         isReliable: true,
@@ -248,7 +255,8 @@ class TimeAuditor {
         hadLongPause: this.hadLongPause,
         pauseMinutes: this.pauseDurationMinutes,
         conflictedQuestions,
-        warningZh: `【提示】偵測到${detail}（有效耗時 ${elapsedSeconds} 秒）。建議將結果作為即時直覺反思。`
+        msgKey: 'auditYellow',
+        rushReasonKey
       };
     }
 
@@ -259,17 +267,50 @@ class TimeAuditor {
       hadLongPause: this.hadLongPause,
       pauseMinutes: this.pauseDurationMinutes,
       conflictedQuestions,
-      warningZh: null
+      msgKey: null
     };
   }
 }
 
-// --- 狀態管理 ---
-let timeAuditor = null;
-const userAnswers = {};
-let chartInstance = null;
-let isPrinting = false;
+// --- 雙語與視圖更新 ---
+function setLanguage(lang) {
+  currentLang = lang;
+  const t = translations[lang];
 
+  document.getElementById("html-title").textContent = t.appTitle;
+  document.getElementById("header-title").textContent = t.headerTitle;
+  document.getElementById("header-desc").innerHTML = t.headerDesc.replace('[+]', '<strong>[+]</strong>').replace('[-]', '<strong>[-]</strong>');
+  document.getElementById("keyboard-tip-text").textContent = t.keyboardTip;
+  document.getElementById("submit-btn").textContent = t.submitBtn;
+  document.getElementById("chart-note").textContent = t.chartNote;
+  document.getElementById("dos-title").textContent = t.dosTitle;
+  document.getElementById("donts-title").textContent = t.dontsTitle;
+  document.getElementById("cost-title").textContent = t.costTitle;
+  document.getElementById("print-btn").textContent = t.printBtn;
+  document.getElementById("retake-btn").textContent = t.retakeBtn;
+
+  renderQuestions();
+  populateJumpSelector();
+  updateProgressUI();
+  setVersionStamps();
+
+  if (latestEvaluation) {
+    renderResultView(latestEvaluation, timeAuditor.audit(), null);
+  }
+}
+
+function setVersionStamps() {
+  const printStamp = document.getElementById("report-stamp-print");
+  const footerStamp = document.getElementById("report-stamp-footer");
+  const t = translations[currentLang];
+  const dateStr = new Date().toLocaleDateString(currentLang === 'zh' ? 'zh-HK' : 'en-US');
+  const stampText = `${t.systemVersion}：${APP_VERSION} ｜ ${t.methodologyBase}：${METHODOLOGY_CODE} ｜ ${t.generatedDate}：${dateStr}`;
+
+  if (printStamp) printStamp.textContent = stampText;
+  if (footerStamp) footerStamp.textContent = stampText;
+}
+
+// --- 初始化入口 ---
 document.addEventListener("DOMContentLoaded", async () => {
   await initAssessment();
 });
@@ -291,20 +332,16 @@ async function initAssessment() {
 
   populateJumpSelector();
   await setupHistoryNotice();
-  setVersionStamps();
+  setLanguage(currentLang);
   bindGlobalEvents();
 }
 
-function setVersionStamps() {
-  const printStamp = document.getElementById("report-stamp-print");
-  const footerStamp = document.getElementById("report-stamp-footer");
-  const stampText = `系統版本：${APP_VERSION} ｜ 方法論基準：${METHODOLOGY_CODE} ｜ 產出日期：${new Date().toLocaleDateString()}`;
-
-  if (printStamp) printStamp.textContent = stampText;
-  if (footerStamp) footerStamp.textContent = stampText;
-}
-
 function bindGlobalEvents() {
+  const langSel = document.getElementById("lang-select");
+  if (langSel) {
+    langSel.addEventListener("change", (e) => setLanguage(e.target.value));
+  }
+
   document.getElementById("submit-btn").addEventListener("click", handleSubmit);
   document.getElementById("retake-btn").addEventListener("click", handleSoftReset);
   document.getElementById("print-btn").addEventListener("click", handlePrintWithCanvasFix);
@@ -313,7 +350,7 @@ function bindGlobalEvents() {
   document.addEventListener("keydown", handleCardKeydown);
 }
 
-// 單向點擊驅動事件流
+// 單向點擊事件流
 function handleCardKeydown(e) {
   const active = document.activeElement;
   if (!active || !active.hasAttribute("data-qidx")) return;
@@ -392,25 +429,20 @@ function showRestoreBanner(draft) {
   const banner = document.getElementById("restore-banner");
   if (!banner) return;
 
+  const t = translations[currentLang];
   banner.innerHTML = "";
   const container = document.createElement("div");
   container.className = "flex flex-col sm:flex-row sm:items-center justify-between gap-3";
 
   const textDiv = document.createElement("div");
-  const strong = document.createElement("span");
-  strong.className = "font-bold";
-  strong.textContent = "偵測到上次未完成的進度：";
-  const desc = document.createElement("span");
-  desc.textContent = `已填寫 ${answeredCount} / ${questionsData.length} 題。請問是否繼續？`;
-  textDiv.appendChild(strong);
-  textDiv.appendChild(desc);
+  textDiv.textContent = t.restoreText(answeredCount, questionsData.length);
 
   const btnDiv = document.createElement("div");
   btnDiv.className = "flex gap-2 flex-shrink-0";
 
   const btnResume = document.createElement("button");
   btnResume.className = "px-3 py-1 bg-green-600 text-white rounded font-medium text-xs hover:bg-green-700 transition";
-  btnResume.textContent = "繼續作答";
+  btnResume.textContent = t.btnResume;
   btnResume.onclick = () => {
     applyRestoredDraft(draft);
     banner.classList.add("hidden");
@@ -418,7 +450,7 @@ function showRestoreBanner(draft) {
 
   const btnDiscard = document.createElement("button");
   btnDiscard.className = "px-3 py-1 bg-gray-200 text-gray-700 rounded font-medium text-xs hover:bg-gray-300 transition";
-  btnDiscard.textContent = "重新開始";
+  btnDiscard.textContent = t.btnDiscard;
   btnDiscard.onclick = () => {
     sessionStorage.removeItem("disc_progress_draft");
     if (timeAuditor) timeAuditor.destroy();
@@ -476,10 +508,11 @@ function persistProgress() {
   }
 }
 
-// 嚴格安全 DOM 構造器
+// 題目渲染：純粹呈現所選語言，中英文不黏連
 function renderQuestions() {
   const container = document.getElementById("questions-list");
   container.innerHTML = "";
+  const t = translations[currentLang];
 
   questionsData.forEach((q, idx) => {
     const card = document.createElement("div");
@@ -487,32 +520,32 @@ function renderQuestions() {
     card.setAttribute("data-qidx", idx);
     card.setAttribute("tabindex", "0");
     card.setAttribute("role", "group");
-    card.setAttribute("aria-label", `第 ${idx + 1} 題卡片，按 1 至 4 鍵選最符合，按 Q 至 R 鍵選最不符`);
+    card.setAttribute("aria-label", t.questionNum(idx));
 
     const isComplete = userAnswers[idx]?.most && userAnswers[idx]?.least;
-    card.className = `p-4 rounded-xl border transition duration-150 keyboard-focus ${
+    card.className = `p-5 rounded-2xl border transition duration-150 keyboard-focus bg-white shadow-sm ${
       isComplete 
-        ? 'border-green-300 bg-green-50 bg-opacity-40 shadow-sm' 
-        : 'border-gray-200 bg-gray-50 bg-opacity-50 hover:bg-gray-50'
+        ? 'border-green-300 bg-green-50 bg-opacity-30' 
+        : 'border-gray-200 hover:border-gray-300'
     }`;
 
     const headerRow = document.createElement("div");
-    headerRow.className = "flex items-center justify-between mb-3 border-b border-gray-200 border-opacity-60 pb-2";
+    headerRow.className = "flex items-center justify-between mb-3 border-b border-gray-100 pb-2.5";
 
     const titleSpan = document.createElement("span");
-    titleSpan.className = "font-semibold text-gray-700 text-sm";
-    titleSpan.textContent = `第 ${idx + 1} 題`;
+    titleSpan.className = "font-bold text-gray-800 text-sm";
+    titleSpan.textContent = t.questionNum(idx);
 
     const legendDiv = document.createElement("div");
-    legendDiv.className = "flex gap-6 text-xs font-semibold";
+    legendDiv.className = "flex gap-4 text-xs font-bold";
 
     const mostLabel = document.createElement("span");
-    mostLabel.className = "w-14 text-center text-blue-600";
-    mostLabel.textContent = "[+] 最符合";
+    mostLabel.className = "w-16 text-center text-blue-600";
+    mostLabel.textContent = t.mostLabel;
 
     const leastLabel = document.createElement("span");
-    leastLabel.className = "w-14 text-center text-red-500";
-    leastLabel.textContent = "[-] 最不符";
+    leastLabel.className = "w-16 text-center text-red-500";
+    leastLabel.textContent = t.leastLabel;
 
     legendDiv.appendChild(mostLabel);
     legendDiv.appendChild(leastLabel);
@@ -525,48 +558,41 @@ function renderQuestions() {
       const isLeast = userAnswers[idx]?.least === opt.d;
 
       const row = document.createElement("div");
-      row.className = "flex items-center justify-between py-2 border-b border-gray-100 last:border-0";
+      row.className = "flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 rounded-lg px-2 transition";
 
       const textWrap = document.createElement("div");
-      textWrap.className = "text-sm text-gray-700 pr-2 flex-1";
-
-      const zhSpan = document.createElement("span");
-      zhSpan.textContent = `${optIdx + 1}. ${opt.zh}`;
-      const enSpan = document.createElement("span");
-      enSpan.className = "block text-xs text-gray-400 mt-0.5";
-      enSpan.textContent = opt.en;
-
-      textWrap.appendChild(zhSpan);
-      textWrap.appendChild(enSpan);
+      textWrap.className = "text-sm text-gray-700 pr-3 flex-1 leading-relaxed";
+      // 根據語言設定直接輸出純淨文本
+      textWrap.textContent = currentLang === 'zh' ? opt.zh : opt.en;
 
       const actionWrap = document.createElement("div");
-      actionWrap.className = "flex gap-6 flex-shrink-0";
+      actionWrap.className = "flex gap-4 flex-shrink-0";
 
       // Most Radio
       const mostBox = document.createElement("label");
-      mostBox.className = "w-14 flex justify-center cursor-pointer p-2";
+      mostBox.className = "w-16 flex justify-center cursor-pointer p-1.5";
       const mostInput = document.createElement("input");
       mostInput.type = "radio";
       mostInput.name = `most_${idx}`;
       mostInput.value = opt.d;
       mostInput.checked = isMost;
       mostInput.tabIndex = -1;
-      mostInput.className = "accent-blue-600 h-4 w-4";
-      mostInput.setAttribute("aria-label", `第 ${idx + 1} 題第 ${optIdx + 1} 項選為最符合`);
+      mostInput.className = "accent-blue-600 h-4 w-4 cursor-pointer";
+      mostInput.setAttribute("aria-label", t.mostAria(idx + 1, optIdx + 1));
       mostInput.onchange = () => handleOptionSelect(idx, "most", opt.d);
       mostBox.appendChild(mostInput);
 
       // Least Radio
       const leastBox = document.createElement("label");
-      leastBox.className = "w-14 flex justify-center cursor-pointer p-2";
+      leastBox.className = "w-16 flex justify-center cursor-pointer p-1.5";
       const leastInput = document.createElement("input");
       leastInput.type = "radio";
       leastInput.name = `least_${idx}`;
       leastInput.value = opt.d;
       leastInput.checked = isLeast;
       leastInput.tabIndex = -1;
-      leastInput.className = "accent-red-500 h-4 w-4";
-      leastInput.setAttribute("aria-label", `第 ${idx + 1} 題第 ${optIdx + 1} 項選為最不符`);
+      leastInput.className = "accent-red-500 h-4 w-4 cursor-pointer";
+      leastInput.setAttribute("aria-label", t.leastAria(idx + 1, optIdx + 1));
       leastInput.onchange = () => handleOptionSelect(idx, "least", opt.d);
       leastBox.appendChild(leastInput);
 
@@ -608,9 +634,9 @@ function updateSingleCardHighlight(idx) {
   if (!card) return;
   const isComplete = userAnswers[idx]?.most && userAnswers[idx]?.least;
   if (isComplete) {
-    card.className = "p-4 rounded-xl border border-green-300 bg-green-50 bg-opacity-40 shadow-sm transition duration-150 keyboard-focus";
+    card.className = "p-5 rounded-2xl border transition duration-150 keyboard-focus bg-green-50 bg-opacity-30 border-green-300 shadow-sm";
   } else {
-    card.className = "p-4 rounded-xl border border-gray-200 bg-gray-50 bg-opacity-50 hover:bg-gray-50 transition duration-150 keyboard-focus";
+    card.className = "p-5 rounded-2xl border transition duration-150 keyboard-focus bg-white border-gray-200 hover:border-gray-300 shadow-sm";
   }
 }
 
@@ -622,7 +648,8 @@ function updateProgressUI() {
   }
 
   const pct = Math.round((done / total) * 100);
-  document.getElementById("progress-text").textContent = `${done} / ${total} 題 (${pct}%)`;
+  const t = translations[currentLang];
+  document.getElementById("progress-text").textContent = t.progressText(done, total, pct);
   document.getElementById("progress-bar").style.width = `${pct}%`;
   document.getElementById("submit-btn").disabled = (done !== total);
 }
@@ -632,13 +659,13 @@ function populateJumpSelector() {
   selector.innerHTML = "";
   const defOpt = document.createElement("option");
   defOpt.value = "";
-  defOpt.textContent = "跳至題號...";
+  defOpt.textContent = translations[currentLang].jumpPlaceholder;
   selector.appendChild(defOpt);
 
   questionsData.forEach((_, idx) => {
     const opt = document.createElement("option");
     opt.value = idx;
-    opt.textContent = `第 ${idx + 1} 題`;
+    opt.textContent = translations[currentLang].questionNum(idx);
     selector.appendChild(opt);
   });
 }
@@ -657,19 +684,19 @@ function handleJumpToQuestion(e) {
 async function handleSubmit() {
   const submitBtn = document.getElementById("submit-btn");
   submitBtn.disabled = true;
-  submitBtn.textContent = "正在計算標準化向量與風格模型...";
+  submitBtn.textContent = translations[currentLang].analyzingBtn;
 
   setTimeout(async () => {
     const auditResult = timeAuditor.audit();
-    const currentEvaluation = runComprehensiveEvaluation();
+    latestEvaluation = runComprehensiveEvaluation();
 
     const previousResult = await SecureStorage.getItem(STORAGE_KEY);
-    await SecureStorage.setItem(STORAGE_KEY, currentEvaluation);
+    await SecureStorage.setItem(STORAGE_KEY, latestEvaluation);
     sessionStorage.removeItem("disc_progress_draft");
 
-    renderResultView(currentEvaluation, auditResult, previousResult);
-    submitBtn.textContent = "計算分析結果";
-  }, 350);
+    renderResultView(latestEvaluation, auditResult, previousResult);
+    submitBtn.textContent = translations[currentLang].submitBtn;
+  }, 300);
 }
 
 function runComprehensiveEvaluation() {
@@ -703,15 +730,7 @@ function runComprehensiveEvaluation() {
   const isBlend = (categoryKey === "CO_DOMINANT" || categoryKey === "ACCENT");
   const profileKey = isBlend ? `${first[0]}${second[0]}` : first[0];
 
-  const fallbackProfile = {
-    titleZh: "多維平衡風格",
-    titleEn: "Balanced Style",
-    descZh: "您的各項風格特質在測量中表現較為均衡，能在不同情境中自如切換。",
-    dos: ["溝通時保持客觀與靈活性", "依專案階段調整協作模式"],
-    donts: ["避免強行將行為模式臉譜化", "不要忽視不同情境的特殊要求"]
-  };
-  const profileData = PROFILE_REGISTRY[profileKey] || PROFILE_REGISTRY[first[0]] || fallbackProfile;
-
+  const profileData = PROFILE_REGISTRY[profileKey] || PROFILE_REGISTRY[first[0]];
   const OPPOSITE_PAIRS = new Set(["DS", "SD", "IC", "CI"]);
   const pairCode = `${first[0]}${second[0]}`;
   const isTension = OPPOSITE_PAIRS.has(pairCode);
@@ -751,52 +770,49 @@ function analyzeCostTolerance(userAnswers, questions) {
 
   const isSignificant = (topCount - secondCount >= 2);
 
-  const costLabels = {
-    social: "外向人際摩擦（被指責強硬）",
-    professional: "形象約束放鬆（被指責話多不沉穩）",
-    internal: "個人訴求妥協（自我妥協壓抑）",
-    efficiency: "進度阻礙責難（因吹毛求疵拖慢進度）"
-  };
-
   return {
     distribution: costScores,
     isSignificant,
     highestCostType: topType,
     highestCount: topCount,
-    highestLabel: costLabels[topType],
     lowestCostType: lowestType,
-    lowestCount: lowestCount,
-    lowestLabel: costLabels[lowestType]
+    lowestCount: lowestCount
   };
 }
 
 function formatPauseDuration(minutes) {
-  if (minutes < 60) return `約 ${minutes} 分鐘`;
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return `約 ${hours} 小時 ${remainingMinutes} 分鐘（跨夜或長時間離開）`;
+  if (currentLang === 'zh') {
+    if (minutes < 60) return `約 ${minutes} 分鐘`;
+    const hours = Math.floor(minutes / 60);
+    return `約 ${hours} 小時 ${minutes % 60} 分鐘`;
+  } else {
+    if (minutes < 60) return `approx. ${minutes} mins`;
+    const hours = Math.floor(minutes / 60);
+    return `approx. ${hours}h ${minutes % 60}m`;
+  }
 }
 
 function renderResultView(res, auditResult, previousResult) {
   document.getElementById("quiz-container").classList.add("hidden");
   const resultBox = document.getElementById("result-container");
   resultBox.classList.remove("hidden");
+  const t = translations[currentLang];
 
   // 1. 信度提示
   const warningContainer = document.getElementById("quality-warning");
   warningContainer.innerHTML = "";
   let hasWarning = false;
 
-  if (auditResult.warningZh) {
+  if (auditResult.msgKey) {
     const p1 = document.createElement("div");
-    p1.textContent = auditResult.warningZh;
+    p1.textContent = t[auditResult.msgKey];
     warningContainer.appendChild(p1);
     hasWarning = true;
   }
   if (auditResult.hadLongPause) {
     const p2 = document.createElement("div");
     p2.className = "mt-1 text-xs text-gray-500";
-    p2.textContent = `※ 系統已自動扣除您切離分頁/休眠的時段（${formatPauseDuration(auditResult.pauseMinutes)}），該時間不計入節奏指標。`;
+    p2.textContent = t.pauseNotice(formatPauseDuration(auditResult.pauseMinutes));
     warningContainer.appendChild(p2);
     hasWarning = true;
   }
@@ -815,9 +831,9 @@ function renderResultView(res, auditResult, previousResult) {
   conflictBox.innerHTML = "";
   if (auditResult.conflictedQuestions && auditResult.conflictedQuestions.length > 0) {
     const strong = document.createElement("strong");
-    strong.textContent = "深度反覆斟酌觀察：";
+    strong.textContent = t.conflictNoticePrefix;
     const span = document.createElement("span");
-    span.textContent = `您在第 ${auditResult.conflictedQuestions.join("、")} 題上進行了多次更改，顯示該題的特質代價在您的工作環境中存在較顯著的抉擇拉扯。`;
+    span.textContent = t.conflictNoticeBody(auditResult.conflictedQuestions.join('、'));
     conflictBox.appendChild(strong);
     conflictBox.appendChild(span);
     conflictBox.classList.remove("hidden");
@@ -843,7 +859,7 @@ function renderResultView(res, auditResult, previousResult) {
   const tensionBox = document.getElementById("tension-notice");
   tensionBox.textContent = "";
   if (res.isTension) {
-    tensionBox.textContent = `【對極動態張力組合】您排名前二的特質（${res.pairCode}）在經典 DISC 圓環中處於對立軸線。這代表您在不同工作情境中展現出矛盾而深刻的切換能力，此種雙高常伴隨較高的內在決策代價。`;
+    tensionBox.textContent = t.tensionExplanation(res.pairCode);
     tensionBox.classList.remove("hidden");
   } else {
     tensionBox.classList.add("hidden");
@@ -859,57 +875,32 @@ function renderExecutiveSummary(res) {
   const container = document.getElementById("executive-summary");
   if (!container) return;
   container.innerHTML = "";
-
-  const categoryNames = {
-    CO_DOMINANT: "共顯平衡型",
-    ACCENT: "主導兼具副色",
-    STRONG_PRIMARY: "強主導型",
-    CLEAR_SINGLE: "極致單一型"
-  };
+  const t = translations[currentLang];
 
   const h3 = document.createElement("h3");
-  h3.className = "text-base font-bold text-gray-900 border-b border-gray-300 pb-2 mb-3";
-  h3.textContent = "主管協作與溝通摘要 (Executive Summary)";
+  h3.className = "text-base font-extrabold text-gray-900 border-b border-gray-300 pb-2 mb-3";
+  h3.textContent = t.execSummaryTitle;
 
   const grid = document.createElement("div");
   grid.className = "grid grid-cols-1 md:grid-cols-3 gap-3 text-xs leading-relaxed";
 
+  const p = res.profileData;
+  const title = currentLang === 'zh' ? p.titleZh : p.titleEn;
+  const cat = t.categories[res.categoryKey];
+  const dos = currentLang === 'zh' ? p.dosZh : p.dosEn;
+  const boundaryLabel = t.costTypes[res.costAnalysis.lowestCostType];
+
   const card1 = document.createElement("div");
   card1.className = "p-3 bg-gray-100 rounded-lg";
-  const c1Label = document.createElement("span");
-  c1Label.className = "block font-semibold text-gray-700";
-  c1Label.textContent = "核心風格判定：";
-  const c1Val = document.createElement("span");
-  c1Val.className = "text-gray-900 font-bold";
-  c1Val.textContent = res.profileData.titleZh;
-  const c1Sub = document.createElement("span");
-  c1Sub.className = "text-gray-500 block mt-0.5";
-  c1Sub.textContent = `（${categoryNames[res.categoryKey]}）`;
-  card1.appendChild(c1Label);
-  card1.appendChild(c1Val);
-  card1.appendChild(c1Sub);
+  card1.innerHTML = `<span class="block font-semibold text-gray-700">${t.execCoreStyle}</span><span class="text-gray-900 font-bold">${title}</span><span class="text-gray-500 block mt-0.5">（${cat}）</span>`;
 
   const card2 = document.createElement("div");
   card2.className = "p-3 bg-gray-100 rounded-lg";
-  const c2Label = document.createElement("span");
-  c2Label.className = "block font-semibold text-green-800";
-  c2Label.textContent = "關鍵溝通要訣 (Do)：";
-  const c2Val = document.createElement("span");
-  c2Val.className = "text-gray-700";
-  c2Val.textContent = res.profileData.dos[0] || "保持直率客觀";
-  card2.appendChild(c2Label);
-  card2.appendChild(c2Val);
+  card2.innerHTML = `<span class="block font-semibold text-green-800">${t.execKeyDo}</span><span class="text-gray-700">${dos[0]}</span>`;
 
   const card3 = document.createElement("div");
   card3.className = "p-3 bg-gray-100 rounded-lg";
-  const c3Label = document.createElement("span");
-  c3Label.className = "block font-semibold text-red-800";
-  c3Label.textContent = "行為防禦底線 (Don't)：";
-  const c3Val = document.createElement("span");
-  c3Val.className = "text-gray-700";
-  c3Val.textContent = `最抗拒承擔「${res.costAnalysis.lowestLabel}」`;
-  card3.appendChild(c3Label);
-  card3.appendChild(c3Val);
+  card3.innerHTML = `<span class="block font-semibold text-red-800">${t.execBoundary}</span><span class="text-gray-700">${boundaryLabel}</span>`;
 
   grid.appendChild(card1);
   grid.appendChild(card2);
@@ -923,52 +914,39 @@ function renderProfileContent(res) {
   const descElem = document.getElementById("profile-desc");
   const dosList = document.getElementById("profile-dos");
   const dontsList = document.getElementById("profile-donts");
+  const t = translations[currentLang];
 
-  const categoryNames = {
-    CO_DOMINANT: "共顯平衡型",
-    ACCENT: "主導兼具副色",
-    STRONG_PRIMARY: "強主導型",
-    CLEAR_SINGLE: "極致單一型"
-  };
+  const p = res.profileData;
+  const title = currentLang === 'zh' ? p.titleZh : p.titleEn;
+  const desc = currentLang === 'zh' ? p.descZh : p.descEn;
+  const dos = currentLang === 'zh' ? p.dosZh : p.dosEn;
+  const donts = currentLang === 'zh' ? p.dontsZh : p.dontsEn;
 
-  titleElem.textContent = `${res.profileData.titleZh} · ${categoryNames[res.categoryKey]}`;
+  titleElem.textContent = `${title} · ${t.categories[res.categoryKey]}`;
 
   descElem.innerHTML = "";
   const mainDesc = document.createElement("p");
   mainDesc.className = "leading-relaxed";
-  mainDesc.textContent = res.profileData.descZh;
+  mainDesc.textContent = desc;
   descElem.appendChild(mainDesc);
 
   if (res.categoryKey === "STRONG_PRIMARY") {
     const secondary = res.ranked[1][0];
-    const secondaryMap = {
-      D: "D（掌控與推進）",
-      I: "I（激勵與社交）",
-      S: "S（耐性與和諧）",
-      C: "C（嚴謹與規範）"
-    };
-
     const secDiv = document.createElement("div");
     secDiv.className = "mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600";
-    const secStrong = document.createElement("strong");
-    secStrong.textContent = `次要色彩觀察（附帶 ${secondary} 特質）：`;
-    const secText = document.createTextNode(
-      ` 雖然您的 ${res.ranked[0][0]} 主導特質極為突出，但同時保留了顯著的 ${secondaryMap[secondary]} 色彩。在極限高壓或複雜跨部門協作時，此項特質會成為您的第二防線。`
-    );
-    secDiv.appendChild(secStrong);
-    secDiv.appendChild(secText);
+    secDiv.innerHTML = t.strongPrimaryAccent(res.ranked[0][0], secondary, t.dims[secondary]);
     descElem.appendChild(secDiv);
   }
 
   dosList.innerHTML = "";
-  res.profileData.dos.forEach(item => {
+  dos.forEach(item => {
     const li = document.createElement("li");
     li.textContent = `✓ ${item}`;
     dosList.appendChild(li);
   });
 
   dontsList.innerHTML = "";
-  res.profileData.donts.forEach(item => {
+  donts.forEach(item => {
     const li = document.createElement("li");
     li.textContent = `✕ ${item}`;
     dontsList.appendChild(li);
@@ -978,22 +956,26 @@ function renderProfileContent(res) {
 function renderCostInsights(cost) {
   const container = document.getElementById("cost-summary");
   container.innerHTML = "";
+  const t = translations[currentLang];
+
+  const topLabel = t.costTypes[cost.highestCostType];
+  const lowestLabel = t.costTypes[cost.lowestCostType];
 
   const titleP = document.createElement("p");
-  titleP.className = "font-medium text-gray-800";
-  titleP.textContent = cost.isSignificant ? `主要願受代價：${cost.highestLabel}` : "代價承受傾向均衡";
+  titleP.className = "font-bold text-yellow-900";
+  titleP.textContent = cost.isSignificant ? `${t.primaryCostTolerated}: ${topLabel}` : t.costBalanced;
 
   const subP = document.createElement("p");
-  subP.className = "text-xs text-gray-600 mt-1";
+  subP.className = "text-xs text-yellow-800 mt-1";
   subP.textContent = cost.isSignificant
-    ? `您最願意承受此項代價以達成工作成果（選擇了 ${cost.highestCount} 次）。`
-    : "前兩項代價差距小於 2 票，表明您在不同挑戰下能彈性切換承受維度。";
+    ? t.costToleratedDesc(cost.highestCount)
+    : t.costBalancedDesc;
 
   const boundaryDiv = document.createElement("div");
   boundaryDiv.className = "mt-3 pt-3 border-t border-yellow-200 border-opacity-60 text-xs text-yellow-900";
   const bStrong = document.createElement("strong");
-  bStrong.textContent = "行為防禦底線（最抗拒承擔）：";
-  const bText = document.createTextNode(` 相較之下，您最不願妥協或承受的是「${cost.lowestLabel}」（僅出現 ${cost.lowestCount} 次）。此處通常反映了您在職場中最不可逾越的價值邊界。`);
+  bStrong.textContent = t.boundaryTitle;
+  const bText = document.createTextNode(` ${lowestLabel} (${cost.lowestCount} ${currentLang === 'zh' ? '次' : 'times'})`);
   boundaryDiv.appendChild(bStrong);
   boundaryDiv.appendChild(bText);
 
@@ -1005,14 +987,15 @@ function renderCostInsights(cost) {
 function renderRadarChart(norm) {
   const ctx = document.getElementById("discChart").getContext("2d");
   if (chartInstance) chartInstance.destroy();
+  const t = translations[currentLang];
 
   chartInstance = new Chart(ctx, {
     type: "radar",
     data: {
-      labels: ["D 支配型", "I 影響型", "S 穩健型", "C 謹慎型"],
+      labels: [t.dims.D, t.dims.I, t.dims.S, t.dims.C],
       datasets: [
         {
-          label: "標準化淨偏好指標 (NNPI, 0–100)",
+          label: t.chartLegend,
           data: [norm.D, norm.I, norm.S, norm.C],
           borderColor: "#2563eb",
           backgroundColor: "rgba(37, 99, 235, 0.25)",
@@ -1021,7 +1004,7 @@ function renderRadarChart(norm) {
           pointRadius: 4.5
         },
         {
-          label: "相對平均基準線 (Baseline = 50)",
+          label: t.chartBaseline,
           data: [50, 50, 50, 50],
           borderColor: "#94a3b8",
           borderDash: [4, 4],
@@ -1049,10 +1032,11 @@ async function setupHistoryNotice() {
   const prev = await SecureStorage.getItem(STORAGE_KEY);
   const noticeElem = document.getElementById("history-notice");
   if (prev && noticeElem) {
-    const dateStr = new Date(prev.timestamp).toLocaleDateString();
+    const t = translations[currentLang];
+    const dateStr = new Date(prev.timestamp).toLocaleDateString(currentLang === 'zh' ? 'zh-HK' : 'en-US');
     noticeElem.innerHTML = "";
     const span = document.createElement("span");
-    span.textContent = `系統偵測到您曾於 ${dateStr} 完成過自評。本次測試提交後將提供雙向軌跡對比。`;
+    span.textContent = t.historyNotice(dateStr);
     noticeElem.appendChild(span);
     noticeElem.classList.remove("hidden");
   }
@@ -1061,6 +1045,7 @@ async function setupHistoryNotice() {
 function renderHistoryDiff(currentNorm, prev) {
   const diffBox = document.getElementById("history-diff-box");
   if (!diffBox) return;
+  const t = translations[currentLang];
 
   if (!prev || !prev.normalized) {
     diffBox.classList.add("hidden");
@@ -1068,22 +1053,22 @@ function renderHistoryDiff(currentNorm, prev) {
   }
 
   const ageInDays = (Date.now() - prev.timestamp) / (1000 * 60 * 60 * 24);
-  const lastDate = new Date(prev.timestamp).toLocaleDateString();
+  const lastDate = new Date(prev.timestamp).toLocaleDateString(currentLang === 'zh' ? 'zh-HK' : 'en-US');
 
   diffBox.innerHTML = "";
 
   if (ageInDays > 90) {
     const expireNote = document.createElement("div");
     expireNote.className = "p-3 bg-gray-100 rounded-lg text-xs text-gray-500 leading-relaxed";
-    expireNote.textContent = `歷史對比提示：您上次測評於 ${lastDate}（距今已逾 ${Math.round(ageInDays)} 天）。因跨度較長，風格變化可能更多源自環境與歷練變遷，故本系統不進行逐點分值相減。`;
+    expireNote.textContent = t.historyExpired(lastDate, Math.round(ageInDays));
     diffBox.appendChild(expireNote);
     diffBox.classList.remove("hidden");
     return;
   }
 
   const title = document.createElement("h3");
-  title.className = "font-semibold text-gray-700 text-xs mb-3";
-  title.textContent = `與上次測評（${lastDate}）之分值變化對比：`;
+  title.className = "font-bold text-gray-700 text-xs mb-3";
+  title.textContent = t.historyDiffTitle(lastDate);
   diffBox.appendChild(title);
 
   const grid = document.createElement("div");
@@ -1098,7 +1083,7 @@ function renderHistoryDiff(currentNorm, prev) {
     box.className = "p-2.5 bg-white border border-gray-200 rounded-lg";
     const dimSpan = document.createElement("span");
     dimSpan.className = "block text-gray-500 mb-1";
-    dimSpan.textContent = `${dim} 維度`;
+    dimSpan.textContent = dim;
 
     const badge = document.createElement("span");
     badge.className = `px-2 py-1 rounded border ${color} font-mono font-bold`;
@@ -1114,7 +1099,8 @@ function renderHistoryDiff(currentNorm, prev) {
 }
 
 function handleSoftReset() {
-  if (!confirm("確定要重新進行評測嗎？本次計算的詳細分析畫面將被清空（您在本地的加密歷史記錄仍會保留）。")) {
+  const t = translations[currentLang];
+  if (!confirm(t.retakeConfirm)) {
     return;
   }
 
