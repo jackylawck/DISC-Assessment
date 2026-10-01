@@ -1,0 +1,11 @@
+{
+  "name": "disc-assessment",
+  "version": "3.2.0",
+  "private": true,
+  "type": "module",
+  "description": "A rigorous, open-source DISC behavioral profiler built on Ipsative forced-choice format.",
+  "scripts": {
+    "test": "node test/registry.test.js",
+    "verify": "./verify.sh"
+  }
+}
