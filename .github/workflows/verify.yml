@@ -1,0 +1,35 @@
+name: Security, Integrity & Psychometrics CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify:
+    name: Run DevSecOps Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Download Vendor Dependencies
+        run: |
+          chmod +x download-vendors.sh
+          ./download-vendors.sh
+
+      - name: Make verify.sh Executable
+        run: chmod +x verify.sh
+
+      - name: Run Integrity & Security Check
+        run: ./verify.sh
+
+      - name: Run Psychometric Logic Tests
+        run: npm test
