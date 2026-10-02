@@ -8,7 +8,7 @@
   <meta name="google-site-verification" content="JZ5UohX-CcP_fQV0_DI9VadkKY4ZoTTkUifL88-fIcY" />
 
   <!-- 🔍 基礎 SEO 核心標籤 -->
-  <title>DISC 行為評估 | 企業級 Ipsative 迫選行為風格評測系統 (DISC-Assessment)</title>
+  <title id="html-title">DISC 行為評估 | 企業級 Ipsative 迫選行為風格評測系統 (DISC-Assessment)</title>
   <meta name="description" content="DISC 行為評估是一款基於心理計量學 Ipsative 強制迫選模型與 NNPI 標準化指標打造的企業級評測系統。具備雙面代價去偏題庫、零伺服器傳輸（Zero-Server）、Web Crypto 本機 AES-GCM-256 加密與完整中英雙語支援。">
   <meta name="keywords" content="DISC, DISC評估, 行為風格, 心理計量學, Ipsative, 迫選問卷, NNPI, 企業人才評測, Web Crypto, 隱私保護, 零伺服器存儲">
   <meta name="author" content="Jacky Law">
@@ -63,7 +63,7 @@
   <meta http-equiv="Permissions-Policy" content="accelerometer=(), gyroscope=(), microphone=(), camera=(), geolocation=(), payment=()">
   <meta name="referrer" content="strict-origin-when-cross-origin">
 
-  <!-- 原有樣式表保留 -->
+  <!-- Tailwind CSS & Chart.js -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" crossorigin="anonymous">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js" crossorigin="anonymous"></script>
 
@@ -76,22 +76,23 @@
       body { background-color: white !important; padding: 0 !important; }
       .print\:hidden { display: none !important; }
       .print\:block { display: block !important; }
+      .print\:flex { display: flex !important; }
       #result-container { display: block !important; }
       #quiz-container, #restore-banner, #history-notice, footer { display: none !important; }
-      .shadow-sm, .border { border-color: #cbd5e1 !important; box-shadow: none !important; }
+      .shadow-sm, .shadow-md, .border { border-color: #cbd5e1 !important; box-shadow: none !important; }
     }
   </style>
 </head>
 <body class="bg-gray-100 text-gray-800 min-h-screen py-8 px-4 font-sans antialiased">
   <div class="max-w-3xl mx-auto bg-white rounded-2xl shadow-md border border-gray-200 p-6 md:p-10 relative">
     
-    <!-- 語言切換選單 + 歷史提示條 -->
+    <!-- 語言切換選單 + 頂部標識 -->
     <div class="flex justify-between items-center mb-6 pb-3 border-b border-gray-100">
       <span class="text-xs font-semibold tracking-wider text-gray-400 uppercase">Ipsative DISC Assessment</span>
       <div class="flex items-center gap-2">
         <label for="lang-select" class="text-xs text-gray-500 font-medium">Language / 語言:</label>
         <select id="lang-select" class="text-xs font-semibold border border-gray-300 rounded-lg px-2.5 py-1 bg-gray-50 text-gray-700 hover:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
-          <option value="zh">繁體中文</option>
+          <option value="zh" selected>繁體中文</option>
           <option value="en">English</option>
         </select>
       </div>
@@ -122,6 +123,13 @@
       <p id="header-desc" class="mt-2 text-sm text-gray-500 leading-relaxed print:hidden">
         本測驗包含 24 組特質矩陣（雙面代價設計）。請在每組中挑選 1 個 <strong>[+] 最符合</strong> 與 1 個 <strong>[-] 最不符</strong>。
       </p>
+
+      <!-- 💡 首頁姓名輸入框（選填） -->
+      <div class="mt-4 flex flex-col sm:flex-row sm:items-center gap-2 print:hidden">
+        <label for="user-name-input" id="label-user-name" class="text-xs font-bold text-gray-600">受測者姓名 (選填)：</label>
+        <input type="text" id="user-name-input" placeholder="例如：Alex Wong" maxlength="30" class="text-xs border border-gray-300 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-xs transition">
+      </div>
+
       <div class="hidden print:block mt-2 text-xs text-gray-500" id="report-stamp-print"></div>
     </header>
 
@@ -142,6 +150,12 @@
 
     <!-- 結果展示區域 -->
     <section id="result-container" class="hidden mt-6 space-y-6" aria-live="polite">
+      <!-- 💡 列印專屬頂部資訊條（含受測者姓名與精準時間戳） -->
+      <div id="print-meta-header" class="hidden print:flex justify-between items-center border-b-2 border-gray-800 pb-2 mb-4 text-xs">
+        <div><strong id="print-name-label">受測者：</strong><span id="print-user-name" class="font-bold">匿名自評</span></div>
+        <div><strong id="print-time-label">評估完成時間：</strong><span id="print-eval-time" class="font-mono">--</span></div>
+      </div>
+
       <!-- 主管版摘要卡 -->
       <div id="executive-summary" class="hidden print:block p-4 bg-gray-50 border border-gray-200 rounded-xl mb-4"></div>
 
