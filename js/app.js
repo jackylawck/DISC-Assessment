@@ -255,12 +255,11 @@ class TimeAuditor {
   }
 }
 
-// --- 語言熱切換函數（100% 同步所有元件） ---
+// --- 語言熱切換函數（100% 同步所有元件與姓名輸入框） ---
 function setLanguage(lang) {
   currentLang = lang;
   const t = translations[lang];
 
-  // 1. 更新靜態標題與文字
   const setElemText = (id, text) => {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
@@ -273,6 +272,17 @@ function setLanguage(lang) {
     descEl.innerHTML = t.headerDesc.replace('[+]', '<strong>[+]</strong>').replace('[-]', '<strong>[-]</strong>');
   }
 
+  // 💡 姓名標籤與 Placeholder 雙語化
+  setElemText("label-user-name", t.userNameLabel);
+  const nameInput = document.getElementById("user-name-input");
+  if (nameInput) {
+    nameInput.placeholder = t.userNamePlaceholder;
+  }
+
+  // 💡 列印抬頭雙語標籤
+  setElemText("print-name-label", t.printNamePrefix);
+  setElemText("print-time-label", t.printTimePrefix);
+
   setElemText("keyboard-tip-text", t.keyboardTip);
   setElemText("submit-btn", t.submitBtn);
   setElemText("chart-note", t.chartNote);
@@ -282,13 +292,11 @@ function setLanguage(lang) {
   setElemText("print-btn", t.printBtn);
   setElemText("retake-btn", t.retakeBtn);
 
-  // 2. 重新渲染題目清單與導航（保留既有勾選）
   renderQuestions();
   populateJumpSelector();
   updateProgressUI();
   setVersionStamps();
 
-  // 3. 若已在結果畫面，即時重繪雙語結果與圖表
   if (latestEvaluation) {
     renderResultView(latestEvaluation, timeAuditor.audit(), null);
   }
@@ -296,7 +304,7 @@ function setLanguage(lang) {
 
 function setVersionStamps() {
   const printStamp = document.getElementById("report-stamp-print");
-  const footerStamp = document.getElementById("report-stamp-footer");
+  const footerStamp = document.getElementById("footer-stamp");
   const t = translations[currentLang];
   const dateStr = new Date().toLocaleDateString(currentLang === 'zh' ? 'zh-HK' : 'en-US');
   const stampText = `${t.systemVersion}：${APP_VERSION} ｜ ${t.methodologyBase}：${METHODOLOGY_CODE} ｜ ${t.generatedDate}：${dateStr}`;
@@ -323,7 +331,6 @@ async function initAssessment() {
   document.getElementById("skeleton-loader").classList.add("hidden");
   document.getElementById("questions-list").classList.remove("hidden");
 
-  // 讀取當前下拉選單預設值
   const langSel = document.getElementById("lang-select");
   if (langSel) {
     currentLang = langSel.value || 'zh';
@@ -340,6 +347,12 @@ function bindGlobalEvents() {
     langSel.addEventListener("change", (e) => {
       setLanguage(e.target.value);
     });
+  }
+
+  // 姓名輸入自動保存進 Session 草稿
+  const nameInput = document.getElementById("user-name-input");
+  if (nameInput) {
+    nameInput.addEventListener("input", persistProgress);
   }
 
   document.getElementById("submit-btn").addEventListener("click", handleSubmit);
@@ -473,6 +486,12 @@ function applyRestoredDraft(draft) {
   if (timeAuditor) timeAuditor.destroy();
   timeAuditor = new TimeAuditor(questionsData.length);
 
+  // 還原名字
+  if (draft.userName) {
+    const nameInput = document.getElementById("user-name-input");
+    if (nameInput) nameInput.value = draft.userName;
+  }
+
   timeAuditor.firstAnswerTimes = draft.firstTimes || {};
   timeAuditor.lastAnswerTimes = draft.lastTimes || {};
   timeAuditor.revisionCounts = draft.revisions || {};
@@ -493,7 +512,11 @@ function applyRestoredDraft(draft) {
 
 function persistProgress() {
   try {
+    const nameInput = document.getElementById("user-name-input");
+    const userName = nameInput ? nameInput.value.trim() : "";
+
     sessionStorage.setItem("disc_progress_draft", JSON.stringify({
+      userName,
       answers: userAnswers,
       firstTimes: timeAuditor.firstAnswerTimes,
       lastTimes: timeAuditor.lastAnswerTimes,
@@ -563,7 +586,6 @@ function renderQuestions() {
 
       const textWrap = document.createElement("div");
       textWrap.className = "text-sm text-gray-700 pr-3 flex-1 leading-relaxed";
-      // 依語言嚴格純淨輸出
       textWrap.textContent = currentLang === 'zh' ? opt.zh : opt.en;
 
       const actionWrap = document.createElement("div");
@@ -794,13 +816,29 @@ function formatPauseDuration(minutes) {
   }
 }
 
+// 💡 渲染結果畫面：包含姓名與精確時間戳
 function renderResultView(res, auditResult, previousResult) {
   document.getElementById("quiz-container").classList.add("hidden");
   const resultBox = document.getElementById("result-container");
   resultBox.classList.remove("hidden");
   const t = translations[currentLang];
 
-  // 1. 信度提示
+  // 1. 抓取受測者姓名並動態注入
+  const nameInput = document.getElementById("user-name-input");
+  const inputVal = nameInput ? nameInput.value.trim() : "";
+  const finalDisplayName = inputVal || t.anonymousUser;
+
+  const printNameEl = document.getElementById("print-user-name");
+  if (printNameEl) printNameEl.textContent = finalDisplayName;
+
+  // 2. 產生精準時間格式 (例: 2026/10/02 11:45:30)
+  const now = new Date();
+  const dateStr = now.toLocaleDateString(currentLang === 'zh' ? 'zh-HK' : 'en-US');
+  const timeStr = now.toLocaleTimeString(currentLang === 'zh' ? 'zh-HK' : 'en-US', { hour12: false });
+  const printTimeEl = document.getElementById("print-eval-time");
+  if (printTimeEl) printTimeEl.textContent = `${dateStr} ${timeStr}`;
+
+  // 3. 信度提示
   const warningContainer = document.getElementById("quality-warning");
   warningContainer.innerHTML = "";
   let hasWarning = false;
@@ -828,7 +866,7 @@ function renderResultView(res, auditResult, previousResult) {
     warningContainer.classList.add("hidden");
   }
 
-  // 2. 深度斟酌題項提示
+  // 4. 深度斟酌題項提示
   const conflictBox = document.getElementById("conflict-notice");
   conflictBox.innerHTML = "";
   if (auditResult.conflictedQuestions && auditResult.conflictedQuestions.length > 0) {
@@ -843,21 +881,21 @@ function renderResultView(res, auditResult, previousResult) {
     conflictBox.classList.add("hidden");
   }
 
-  // 3. 雙層 rAF 繪製圖表
+  // 5. 雙層 rAF 繪製圖表
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       renderRadarChart(res.normalized);
     });
   });
 
-  // 4. 四階梯差異化文案與主管版摘要
+  // 6. 風格文案與主管版摘要
   renderProfileContent(res);
-  renderExecutiveSummary(res);
+  renderExecutiveSummary(res, finalDisplayName);
 
-  // 5. 代價分析
+  // 7. 代價分析
   renderCostInsights(res.costAnalysis);
 
-  // 6. 對極張力說明
+  // 8. 對極張力說明
   const tensionBox = document.getElementById("tension-notice");
   tensionBox.textContent = "";
   if (res.isTension) {
@@ -867,13 +905,13 @@ function renderResultView(res, auditResult, previousResult) {
     tensionBox.classList.add("hidden");
   }
 
-  // 7. 歷史比較卡片
+  // 9. 歷史比較卡片
   renderHistoryDiff(res.normalized, previousResult);
 
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function renderExecutiveSummary(res) {
+function renderExecutiveSummary(res, displayName) {
   const container = document.getElementById("executive-summary");
   if (!container) return;
   container.innerHTML = "";
@@ -881,7 +919,7 @@ function renderExecutiveSummary(res) {
 
   const h3 = document.createElement("h3");
   h3.className = "text-base font-extrabold text-gray-900 border-b border-gray-300 pb-2 mb-3";
-  h3.textContent = t.execSummaryTitle;
+  h3.textContent = `${t.execSummaryTitle} (${displayName})`;
 
   const grid = document.createElement("div");
   grid.className = "grid grid-cols-1 md:grid-cols-3 gap-3 text-xs leading-relaxed";
