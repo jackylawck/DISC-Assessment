@@ -15,6 +15,7 @@
 - **無伺服器與本機 AES-GCM 加密**：
   - 運算完全於瀏覽器本地沙盒執行，無任何資料傳輸至遠端伺服器。
   - 歷史評估資料採用 Web Crypto API 產生的 256 位元隨機金鑰進行 AES-GCM 加密並存放於本地端（IndexedDB / LocalStorage）。
+- **專業列印與報告歸檔（受測者姓名 & 時間戳）**：首頁支援選填受測者姓名，列印或匯出 PDF 報告時自動生成包含受測者署名與精確至秒的完成時間戳（純本機記憶體處理，不破壞零資料保留原則）。
 - **完整雙語介面（i18n）**：支援繁體中文與英文一鍵即時切換，包含題庫、分析報告、主管摘要及雷達圖。
 - **PWA 行動裝置原生體驗**：配置完整 `manifest.json` 與雙尺寸高保真圖標，支援 iOS Safari「加入主畫面」與 Android 獨立 App 視窗模式。
 - **無障礙與高效鍵盤流**：支援全鍵盤作答（`Tab` 切換題卡，數字鍵 `1-4` 選最符合，`Q-R` 選最不符），杜絕焦點競爭與重複觸發。
@@ -108,6 +109,7 @@ python3 -m http.server 8000
 * Retest records are encrypted on-device with AES-GCM-256 via the Web Crypto API, storing isolated keys in IndexedDB.
 
 
+* **Enterprise Reporting & Timestamps**: Supports optional assessee name entry on the landing page and dynamically embeds assessee details alongside second-precision evaluation timestamps in printable/PDF briefs without sacrificing zero-retention principles.
 * **Full Internationalization (i18n)**: Seamless hot-switching between Traditional Chinese (繁體中文) and English across questionnaire items, reports, radar charts, and executive briefs.
 * **Native Progressive Web App (PWA)**: Equipped with `manifest.json` and dual-resolution icons, supporting iOS Safari "Add to Home Screen" and standalone windowed execution.
 * **High-Velocity Accessible Keyboard Flow**: Full WAI-ARIA and keyboard shortcut support (`Tab` to navigate cards, `1-4` for Most, `Q-R` for Least), built with robust unidirectional event dispatching.
