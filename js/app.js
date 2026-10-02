@@ -193,7 +193,6 @@ class TimeAuditor {
       .sort((a, b) => a.time - b.time);
 
     let hasRushedPattern = false;
-    let rushReasonKey = "";
 
     if (chronologicalFirstTimes.length >= 8) {
       const rawIntervals = [];
@@ -213,21 +212,6 @@ class TimeAuditor {
       const tailAvg = tailIntervals.reduce((a, b) => a + b, 0) / tailIntervals.length;
       if (tailAvg < Math.max(1000, medianBaseline * 0.25)) {
         hasRushedPattern = true;
-        rushReasonKey = "tailRushed";
-      }
-
-      let accelStreak = 0;
-      for (let i = 1; i < safeIntervals.length; i++) {
-        if (safeIntervals[i] < safeIntervals[i - 1] * 0.70) {
-          accelStreak++;
-          if (accelStreak >= 3) {
-            hasRushedPattern = true;
-            rushReasonKey = "accelerating";
-            break;
-          }
-        } else {
-          accelStreak = 0;
-        }
       }
     }
 
@@ -255,8 +239,7 @@ class TimeAuditor {
         hadLongPause: this.hadLongPause,
         pauseMinutes: this.pauseDurationMinutes,
         conflictedQuestions,
-        msgKey: 'auditYellow',
-        rushReasonKey
+        msgKey: 'auditYellow'
       };
     }
 
@@ -272,28 +255,40 @@ class TimeAuditor {
   }
 }
 
-// --- 雙語與視圖更新 ---
+// --- 語言熱切換函數（100% 同步所有元件） ---
 function setLanguage(lang) {
   currentLang = lang;
   const t = translations[lang];
 
-  document.getElementById("html-title").textContent = t.appTitle;
-  document.getElementById("header-title").textContent = t.headerTitle;
-  document.getElementById("header-desc").innerHTML = t.headerDesc.replace('[+]', '<strong>[+]</strong>').replace('[-]', '<strong>[-]</strong>');
-  document.getElementById("keyboard-tip-text").textContent = t.keyboardTip;
-  document.getElementById("submit-btn").textContent = t.submitBtn;
-  document.getElementById("chart-note").textContent = t.chartNote;
-  document.getElementById("dos-title").textContent = t.dosTitle;
-  document.getElementById("donts-title").textContent = t.dontsTitle;
-  document.getElementById("cost-title").textContent = t.costTitle;
-  document.getElementById("print-btn").textContent = t.printBtn;
-  document.getElementById("retake-btn").textContent = t.retakeBtn;
+  // 1. 更新靜態標題與文字
+  const setElemText = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
 
+  setElemText("html-title", t.appTitle);
+  setElemText("header-title", t.headerTitle);
+  const descEl = document.getElementById("header-desc");
+  if (descEl) {
+    descEl.innerHTML = t.headerDesc.replace('[+]', '<strong>[+]</strong>').replace('[-]', '<strong>[-]</strong>');
+  }
+
+  setElemText("keyboard-tip-text", t.keyboardTip);
+  setElemText("submit-btn", t.submitBtn);
+  setElemText("chart-note", t.chartNote);
+  setElemText("dos-title", t.dosTitle);
+  setElemText("donts-title", t.dontsTitle);
+  setElemText("cost-title", t.costTitle);
+  setElemText("print-btn", t.printBtn);
+  setElemText("retake-btn", t.retakeBtn);
+
+  // 2. 重新渲染題目清單與導航（保留既有勾選）
   renderQuestions();
   populateJumpSelector();
   updateProgressUI();
   setVersionStamps();
 
+  // 3. 若已在結果畫面，即時重繪雙語結果與圖表
   if (latestEvaluation) {
     renderResultView(latestEvaluation, timeAuditor.audit(), null);
   }
@@ -310,7 +305,7 @@ function setVersionStamps() {
   if (footerStamp) footerStamp.textContent = stampText;
 }
 
-// --- 初始化入口 ---
+// --- 頁面初始化 ---
 document.addEventListener("DOMContentLoaded", async () => {
   await initAssessment();
 });
@@ -323,23 +318,28 @@ async function initAssessment() {
   } else {
     if (timeAuditor) timeAuditor.destroy();
     timeAuditor = new TimeAuditor(questionsData.length);
-    renderQuestions();
-    updateProgressUI();
   }
 
   document.getElementById("skeleton-loader").classList.add("hidden");
   document.getElementById("questions-list").classList.remove("hidden");
 
-  populateJumpSelector();
-  await setupHistoryNotice();
+  // 讀取當前下拉選單預設值
+  const langSel = document.getElementById("lang-select");
+  if (langSel) {
+    currentLang = langSel.value || 'zh';
+  }
+
   setLanguage(currentLang);
+  await setupHistoryNotice();
   bindGlobalEvents();
 }
 
 function bindGlobalEvents() {
   const langSel = document.getElementById("lang-select");
   if (langSel) {
-    langSel.addEventListener("change", (e) => setLanguage(e.target.value));
+    langSel.addEventListener("change", (e) => {
+      setLanguage(e.target.value);
+    });
   }
 
   document.getElementById("submit-btn").addEventListener("click", handleSubmit);
@@ -350,7 +350,7 @@ function bindGlobalEvents() {
   document.addEventListener("keydown", handleCardKeydown);
 }
 
-// 單向點擊事件流
+// 鍵盤單向事件流
 function handleCardKeydown(e) {
   const active = document.activeElement;
   if (!active || !active.hasAttribute("data-qidx")) return;
@@ -508,9 +508,10 @@ function persistProgress() {
   }
 }
 
-// 題目渲染：純粹呈現所選語言，中英文不黏連
+// 題目渲染：依 currentLang 輸出純中文或純英文
 function renderQuestions() {
   const container = document.getElementById("questions-list");
+  if (!container) return;
   container.innerHTML = "";
   const t = translations[currentLang];
 
@@ -562,7 +563,7 @@ function renderQuestions() {
 
       const textWrap = document.createElement("div");
       textWrap.className = "text-sm text-gray-700 pr-3 flex-1 leading-relaxed";
-      // 根據語言設定直接輸出純淨文本
+      // 依語言嚴格純淨輸出
       textWrap.textContent = currentLang === 'zh' ? opt.zh : opt.en;
 
       const actionWrap = document.createElement("div");
@@ -656,6 +657,7 @@ function updateProgressUI() {
 
 function populateJumpSelector() {
   const selector = document.getElementById("jump-select");
+  if (!selector) return;
   selector.innerHTML = "";
   const defOpt = document.createElement("option");
   defOpt.value = "";
