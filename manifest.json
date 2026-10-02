@@ -1,0 +1,24 @@
+{
+  "name": "DISC 行為評估 (DISC-Assessment)",
+  "short_name": "DISC評估",
+  "description": "企業級 Ipsative 迫選行為風格評估系統",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f3f4f6",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "DISCAssessment192icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "DISCAssessment512icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
