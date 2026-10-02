@@ -1,15 +1,70 @@
 <!DOCTYPE html>
-<html lang="zh-HK">
+<html lang="zh-HK" prefix="og: https://ogp.me/ns#">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title id="html-title">DISC 行為評估</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover">
 
+  <!-- 🔍 Google 站長驗證 -->
+  <meta name="google-site-verification" content="JZ5UohX-CcP_fQV0_DI9VadkKY4ZoTTkUifL88-fIcY" />
+
+  <!-- 🔍 基礎 SEO 核心標籤 -->
+  <title>DISC 行為評估 | 企業級 Ipsative 迫選行為風格評測系統 (DISC-Assessment)</title>
+  <meta name="description" content="DISC 行為評估是一款基於心理計量學 Ipsative 強制迫選模型與 NNPI 標準化指標打造的企業級評測系統。具備雙面代價去偏題庫、零伺服器傳輸（Zero-Server）、Web Crypto 本機 AES-GCM-256 加密與完整中英雙語支援。">
+  <meta name="keywords" content="DISC, DISC評估, 行為風格, 心理計量學, Ipsative, 迫選問卷, NNPI, 企業人才評測, Web Crypto, 隱私保護, 零伺服器存儲">
+  <meta name="author" content="Jacky Law">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://jackylawck.github.io/DISC-Assessment/">
+
+  <!-- 🌐 Open Graph / Facebook / LinkedIn 社交卡片 -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://jackylawck.github.io/DISC-Assessment/">
+  <meta property="og:title" content="DISC 行為評估 | 專業企業級行為風格探索系統">
+  <meta property="og:description" content="採用 Ipsative 迫選與雙面代價去偏演算法。純前端零資料上傳、本機 AES-GCM-256 加密，提供客觀且具備防禦力的行為偏好分析。">
+  <meta property="og:image" content="https://jackylawck.github.io/DISC-Assessment/DISCAssessment512icon.png">
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
+  <meta property="og:image:alt" content="DISC 行為評估系統圖標">
+  <meta property="og:locale" content="zh_HK">
+  <meta property="og:site_name" content="DISC 行為評估 (DISC-Assessment)">
+
+  <!-- 🐦 Twitter Cards -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="DISC 行為評估 | DISC-Assessment">
+  <meta name="twitter:description" content="基於心理計量學 Ipsative 迫選模型與 NNPI 指標的行為風格評測工具。支援中英雙語與端點加密。">
+  <meta name="twitter:image" content="https://jackylawck.github.io/DISC-Assessment/DISCAssessment512icon.png">
+
+  <!-- 📱 PWA 與手機「加入主畫面」核心設定 -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" sizes="192x192" href="DISCAssessment192icon.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="DISCAssessment512icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="DISCAssessment192icon.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="DISCAssessment512icon.png">
+  
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="DISC評估">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="application-name" content="DISC 行為評估">
+
+  <!-- 🛡️ 企業級資安防禦策略：CSP 與硬體權限沙盒化 -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+    style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+    img-src 'self' data: blob: https://jackylawck.github.io;
+    font-src 'self' data:;
+    connect-src 'self';
+    media-src 'none';
+    object-src 'none';
+    base-uri 'self';
+    form-action 'none';
+  ">
+  <meta http-equiv="Permissions-Policy" content="accelerometer=(), gyroscope=(), microphone=(), camera=(), geolocation=(), payment=()">
   <meta name="referrer" content="strict-origin-when-cross-origin">
 
-  <!-- 使用全域相容且美觀的 Tailwind CSS -->
+  <!-- 原有樣式表保留 -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" crossorigin="anonymous">
-  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js" crossorigin="anonymous"></script>
 
   <style>
